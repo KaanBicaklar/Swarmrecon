@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Management Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        body {
+            transition: background-color 0.5s, color 0.5s;
+        }
+        .dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        .dark-mode .result-item {
+            background: #1f1f1f;
+            border-color: #3a3a3a;
+        }
+        .dark-mode .result-item:hover {
+            background-color: #333;
+        }
+        .dark-mode .result-item::before {
+            color: black;
+        }
+        .dark-mode .result-item[data-level="info"]::before {
+            background-color: green;
+        }
+        .dark-mode .result-item[data-level="low"]::before {
+            background-color: #17a2b8;
+        }
+        .dark-mode .result-item[data-level="medium"]::before {
+            background-color: #ffc107;
+        }
+        .dark-mode .result-item[data-level="high"]::before {
+            background-color: #dc3545;
+        }
+        .dark-mode .result-item[data-level="critical"]::before {
+            background-color: #721c24;
+        }
+        .results-grid {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        .result-item {
+            flex: 1 1 calc(33.333% - 1rem);
+            margin: 0.5rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: transform 0.3s, background-color 0.3s;
+            position: relative;
+        }
+        .result-item:hover {
+            transform: scale(1.05);
+            background-color: #e2e6ea;
+        }
+        .result-item[data-level="info"]::before {
+            background-color: green;
+        }
+        .result-item[data-level="low"]::before {
+            background-color: #17a2b8;
+        }
+        .result-item[data-level="medium"]::before {
+            background-color: #ffc107;
+        }
+        .result-item[data-level="high"]::before {
+            background-color: #dc3545;
+        }
+        .result-item[data-level="critical"]::before {
+            background-color: #721c24;
+        }
+        .result-item::before {
+            content: attr(data-level);
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: white;
+        }
+        .copy-alert {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: #dc3545;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 0.25rem;
+            font-size: 1.25rem;
+            display: none;
+            z-index: 1050;
+            transition: opacity 0.5s;
+        }
+        .copy-alert.show {
+            display: block;
+            opacity: 1;
+        }
+        .copy-alert.hide {
+            opacity: 0;
+        }
+        .filter-buttons {
+            margin-bottom: 1rem;
+        }
+        .filter-buttons .btn {
+            margin-right: 0.5rem;
+        }
+            .console-item {
+        background-color: black;
+        color: white;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        font-family: 'Courier New', Courier, monospace;
+    }
+
+    .console-item p {
+        margin-bottom: 5px;
+    }
+
+    .console-item ul {
+        list-style-type: none;
+        padding-left: 0;
+        margin: 0;
+    }
+
+    .console-item ul li {
+        border-left: 2px solid green;
+        padding-left: 10px;
+        margin-bottom: 5px;
+    }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="app" class="container mt-5">
+        <div class="d-flex justify-content-between mb-3">
+            <h2>Server Management Dashboard</h2>
+            <button @click="toggleDarkMode" class="btn btn-secondary">
+                <i :class="darkMode ? 'fas fa-sun' : 'fas fa-moon'"></i>
+            </button>
+        </div>
+
+        <!-- Copy Alert -->
+        <div class="copy-alert" :class="{ show: showAlert, hide: !showAlert }">{{ alertMessage }}</div>
+         <!-- Bandwidth Usage Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3>Bandwidth Usage</h3>
+                <button class="btn btn-success" @click="setOnline">Online</button>
+                <button class="btn btn-danger" @click="setOffline">Offline</button>
+                <canvas id="bandwidthChart"></canvas>
+            </div>
+        </div>
+        <!-- Server Data Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3>Server Status</h3>
+                <button class="btn btn-primary mb-3" @click="fetchServerData">Refresh Server Data</button>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>CPU Usage (%)</th>
+                            <th>RAM Usage (%)</th>
+                            <th>Download (Mbps)</th>
+                            <th>Upload (Mbps)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="server in servers" :key="server.ip_address">
+                            <td>{{ server.ip_address }}</td>
+                            <td>{{ server.cpu_usage }}</td>
+                            <td>{{ server.ram_usage }}</td>
+                            <td>{{ server.download }}</td>
+                            <td>{{ server.upload }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Attacks Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3>Perform an Attack</h3>
+                <select class="form-control mb-2" v-model="selectedAttack">
+                    <option v-for="attack in attacks" :value="attack.id" :key="attack.id">{{ attack.name }}</option>
+                </select>
+                <input type="text" v-model="domain" class="form-control mb-2" placeholder="Enter domain">
+                <button class="btn btn-danger" @click="performAttack">Start Attack</button>
+            </div>
+        </div>
+
+        <!-- Scanned Domains Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3>Scanned Domains</h3>
+                <input type="text" v-model="domainSearch" class="form-control mb-2" placeholder="Search for a domain">
+                <button class="btn btn-primary mb-3" @click="fetchScannedDomains">Refresh Scanned Domains</button>
+                <div class="d-flex flex-wrap">
+                    <div class="p-2" v-for="domain in filteredDomains" :key="domain" @click="fetchDomainResults(domain)">
+                        <a href="#" class="btn btn-info">{{ domain }}</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+<div class="row mt-5">
+    <div class="col-12">
+        <h3>Console</h3>
+        <div class="console-output">
+            <div v-for="(item, index) in consoleResponses" :key="index" class="console-item">
+                <p><strong>Node:</strong> {{ item.node }}</p>
+                <p><strong>Content:</strong></p>
+                <ul>
+                    <template v-for="(content, idx) in item.content.split('\n')" :key="idx">
+                        <li v-if="content.trim()">{{ content.trim() }}</li>
+                        <!-- Recursive olarak alt öğeleri işlemek için gerektiğinde ilgili yapıyı buraya ekleyebilirsiniz -->
+                    </template>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+        <!-- Domain Results Section -->
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3>Domain Results</h3>
+                <div class="filter-buttons">
+                    <button class="btn btn-info" @click="filterResults('info')">Info</button>
+                    <button class="btn btn-secondary" @click="filterResults('low')">Low</button>
+                    <button class="btn btn-warning" @click="filterResults('medium')">Medium</button>
+                    <button class="btn btn-danger" @click="filterResults('high')">High</button>
+                    <button class="btn btn-dark" @click="filterResults('critical')">Critical</button>
+                    <button class="btn btn-light" @click="filterResults('')">All</button>
+                </div>
+                <div v-if="uniqueSortedResults.length > 0">
+                    <h5>Results for: {{ selectedDomain }}</h5>
+                    <div class="results-grid">
+                        <div v-for="result in filteredResults" :key="result" class="result-item" :data-level="getResultLevel(result)" @click="copyToClipboard(result)">
+                            <p>{{ result }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div v-else>
+                    <p>No results to display.</p>
+                </div>
+            </div>
+        </div>
+
+       
+
+       
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                servers: [],
+                attacks: [],
+                selectedAttack: '',
+                domain: '',
+                domainSearch: '',
+                scannedDomains: [],
+                selectedDomain: '',
+                selectedDomainResults: [],
+                darkMode: false,
+                showAlert: false,
+                alertMessage: '',
+                filter: '',
+                bandwidthChart: null,
+                bandwidthData: {
+                    timestamps: [],
+                    upload: [],
+                    download: []
+                },
+                isOnline: false,
+                intervalId: null,
+                consoleResponses: [], // New property for console responses
+            },
+            computed: {
+                filteredDomains() {
+                    if (this.domainSearch) {
+                        return this.scannedDomains.filter(domain => domain.includes(this.domainSearch));
+                    }
+                    return this.scannedDomains;
+                },
+                uniqueSortedResults() {
+                    let allResults = this.selectedDomainResults.flatMap(result => result.content.split('\n'));
+                    let uniqueResults = [...new Set(allResults)].filter(result => result.trim() !== '').sort();
+                    return uniqueResults;
+                },
+                filteredResults() {
+                    if (!this.filter) {
+                        return this.uniqueSortedResults;
+                    }
+                    return this.uniqueSortedResults.filter(result => result.includes(`[${this.filter}]`));
+                }
+            },
+            methods: {
+                fetchServerData() {
+                    axios.get('/data')
+                        .then(response => {
+                            this.servers = response.data;
+                            this.updateBandwidthChart(response.data);
+                        })
+                        .catch(error => console.error('Error fetching server data:', error));
+                },
+                fetchAttacks() {
+                    axios.get('/attacks')
+                        .then(response => {
+                            this.attacks = response.data;
+                        })
+                        .catch(error => console.error('Error fetching attacks:', error));
+                },
+                performAttack() {
+                    axios.post('/attack', {
+                        attack_id: this.selectedAttack,
+                        domain: this.domain
+                    })
+                    .then(response => {
+                        alert(response.data);
+                        this.fetchScannedDomains();
+                    })
+                    .catch(error => console.error('Error performing attack:', error));
+                },
+                fetchScannedDomains() {
+                    axios.get('/operations/resultslist')
+                        .then(response => {
+                            this.scannedDomains = response.data;
+                        })
+                        .catch(error => console.error('Error fetching scanned domains:', error));
+                },
+                fetchDomainResults(domain) {
+                    axios.get(`/operations/result/${domain}`)
+                        .then(response => {
+                            this.selectedDomain = domain;
+                            this.selectedDomainResults = response.data;
+                            this.fetchConsoleResponses(domain); // Fetch console responses after domain results are fetched
+                        })
+                        .catch(error => console.error(`Error fetching results for domain ${domain}:`, error));
+                },
+                fetchConsoleResponses(domain) {
+                    axios.get(`/operations/result/${domain}`)
+                        .then(response => {
+                            this.consoleResponses = response.data;
+                        })
+                        .catch(error => console.error(`Error fetching console responses for domain ${domain}:`, error));
+                },
+                toggleDarkMode() {
+                    this.darkMode = !this.darkMode;
+                    document.body.classList.toggle('dark-mode', this.darkMode);
+                },
+                copyToClipboard(text) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        this.alertMessage = `${text} copied to clipboard`;
+                        this.showAlert = true;
+                        setTimeout(() => {
+                            this.showAlert = false;
+                        }, 2000);
+                    }).catch(err => {
+                        console.error('Error copying to clipboard: ', err);
+                    });
+                },
+                filterResults(level) {
+                    this.filter = level;
+                },
+                getResultLevel(result) {
+                    if (result.includes('[low]')) {
+                        return 'low';
+                    } else if (result.includes('[medium]')) {
+                        return 'medium';
+                    } else if (result.includes('[info]')) {
+                        return 'info';
+                    } else if (result.includes('[high]')) {
+                        return 'high';
+                    } else if (result.includes('[critical]')) {
+                        return 'critical';
+                    } else {
+                        return '';
+                    }
+                },
+                updateBandwidthChart(serverData) {
+                    let timestamp = new Date().toLocaleTimeString();
+                    let totalUpload = serverData.reduce((total, server) => total + server.upload, 0);
+                    let totalDownload = serverData.reduce((total, server) => total + server.download, 0);
+
+                    this.bandwidthData.timestamps.push(timestamp);
+                    this.bandwidthData.upload.push(totalUpload);
+                    this.bandwidthData.download.push(totalDownload);
+
+                    if (this.bandwidthChart) {
+                        this.bandwidthChart.data.labels = this.bandwidthData.timestamps;
+                        this.bandwidthChart.data.datasets[0].data = this.bandwidthData.upload;
+                        this.bandwidthChart.data.datasets[1].data = this.bandwidthData.download;
+                        this.bandwidthChart.update();
+                    }
+                },
+                createBandwidthChart() {
+                    let ctx = document.getElementById('bandwidthChart').getContext('2d');
+                    this.bandwidthChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: this.bandwidthData.timestamps,
+                            datasets: [
+                                {
+                                    label: 'Upload (Mbit)',
+                                    data: this.bandwidthData.upload,
+                                    borderColor: 'rgba(75, 192, 192, 1)',
+                                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Download (Mbit)',
+                                    data: this.bandwidthData.download,
+                                    borderColor: 'rgba(153, 102, 255, 1)',
+                                    backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                xAxes: [{
+                                    type: 'time',
+                                    time: {
+                                        unit: 'second'
+                                    }
+                                }],
+                                yAxes: [{
+                                    beginAtZero: true
+                                }]
+                            }
+                        }
+                    });
+                },
+                setOnline() {
+                    if (!this.isOnline) {
+                        this.isOnline = true;
+                        this.startAutoRefresh();
+                    }
+                },
+                setOffline() {
+                    if (this.isOnline) {
+                        this.isOnline = false;
+                        this.stopAutoRefresh();
+                    }
+                },
+                startAutoRefresh() {
+                    this.fetchServerData();
+                    this.intervalId = setInterval(this.fetchServerData, 3000);
+                },
+                stopAutoRefresh() {
+                    clearInterval(this.intervalId);
+                    this.intervalId = null;
+                },
+            },
+            mounted() {
+                this.fetchServerData();
+                this.fetchAttacks();
+                this.fetchScannedDomains();
+                this.createBandwidthChart();
+            }
+        });
+    </script>
+</body>
+</html>

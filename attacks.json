@@ -1,0 +1,30 @@
+{
+    "1": {
+        "name": "Scilla",
+        "command": "scilla subdomain -w /opt/dnslist -target {domain} -ot /bbauto/scilla/scilla_{domain}.txt &"
+    },
+    "2": {
+        "name": "Subfinder",
+        "command": "/root/.pdtm/go/bin/subfinder -d {domain} -all -o /bbauto/subfinder/Subfinder_{domain}.txt &"
+    },
+    "3": {
+        "name": "gau",
+        "command": "gau {domain} --subs > /bbauto/gau/gau_{domain}.txt &"
+    },
+    "4": {
+        "name": "assetfinder",
+        "command": "/root/go/bin/assetfinder -subs-only {domain} >/bbauto/assetfinder/assetfinder_{domain}.txt &"
+    },
+    "5": {
+        "name": "Kapsami_olustur",
+        "command": "cat /bbauto/*/*{domain}* |sort -u > /bbauto/nuclei/kapsam_{domain} &"
+    },
+    "6": {
+        "name": "Nuclei",
+        "command": "/root/.pdtm/go/bin/nuclei -l /bbauto/nuclei/kapsam_{domain}* -rl 5 -exclude-templates $HOME/nuclei-templates/misconfiguration/http-missing-security-headers.yaml -o /bbauto/nuclei/sonuc_{domain}.txt &"
+    },
+    "7": {
+        "name": "httpx_kapsam",
+        "command": "cat /bbauto/nuclei/kapsam_{domain}* |httpx -silent -no-color -random-agent -ports 80,443 > /bbauto/nuclei/httpx_kapsam_{domain}"
+    }
+}
